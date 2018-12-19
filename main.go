@@ -55,6 +55,28 @@ func mosaic(w http.ResponseWriter, r *http.Request) {
 	// Clone tile database
 	db := cloneTilesDB()
 
+	singleThreadedMosiac(&db, original, newImage, &bounds, tileSize)
+
+	buf1 := new(bytes.Buffer)
+	jpeg.Encode(buf1, original, nil)
+	originalStr := base64.StdEncoding.EncodeToString(buf1.Bytes())
+
+	buf2 := new(bytes.Buffer)
+	jpeg.Encode(buf2, newImage, nil)
+	mosaic := base64.StdEncoding.EncodeToString(buf2.Bytes())
+	t1 := time.Now()
+	images := map[string]string{
+		"original": originalStr,
+		"mosaic":   mosaic,
+		"duration": fmt.Sprintf("%v", t1.Sub(t0)),
+	}
+
+	t, _ := template.ParseFiles("results.html")
+	t.Execute(w, images)
+}
+
+func singleThreadedMosiac(
+	db *map[string][3]float64, original image.Image, newImage *image.NRGBA, bounds *image.Rectangle, tileSize int) {
 	// source point for each tile, which starts with 0, 0 of each tile
 	sp := image.Point{0, 0}
 	for y := bounds.Min.Y; y < bounds.Max.Y; y = y + tileSize {
@@ -64,7 +86,7 @@ func mosaic(w http.ResponseWriter, r *http.Request) {
 			color := [3]float64{float64(r), float64(g), float64(b)}
 
 			// get the closest tile from the tiles DB
-			nearest := nearest(color, &db)
+			nearest := nearest(color, db)
 			file, err := os.Open(nearest)
 			if err != nil {
 				fmt.Println("error:", nearest)
@@ -86,21 +108,4 @@ func mosaic(w http.ResponseWriter, r *http.Request) {
 			draw.Draw(newImage, tileBounds, tile, sp, draw.Src)
 		}
 	}
-
-	buf1 := new(bytes.Buffer)
-	jpeg.Encode(buf1, original, nil)
-	originalStr := base64.StdEncoding.EncodeToString(buf1.Bytes())
-
-	buf2 := new(bytes.Buffer)
-	jpeg.Encode(buf2, newImage, nil)
-	mosaic := base64.StdEncoding.EncodeToString(buf2.Bytes())
-	t1 := time.Now()
-	images := map[string]string{
-		"original": originalStr,
-		"mosaic":   mosaic,
-		"duration": fmt.Sprintf("%v", t1.Sub(t0)),
-	}
-
-	t, _ := template.ParseFiles("results.html")
-	t.Execute(w, images)
 }
