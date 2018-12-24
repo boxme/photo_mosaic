@@ -7,9 +7,13 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"sync"
 )
 
-var TILESDB map[string][3]float64
+type DB struct {
+	mutex *sync.Mutex
+	store map[string][3]float64
+}
 
 func averageColor(img image.Image) [3]float64 {
 	bounds := img.Bounds()
@@ -41,10 +45,12 @@ func resize(in image.Image, newWidth int) image.NRGBA {
 	return *out
 }
 
-func cloneTilesDB() map[string][3]float64 {
-	db := make(map[string][3]float64)
-	for k, v := range TILESDB {
-		db[k] = v
+func cloneTilesDB() *DB {
+	db := &DB{
+		store: make(map[string][3]float64),
+	}
+	for k, v := range db.store {
+		db.store[k] = v
 	}
 
 	return db
@@ -75,17 +81,19 @@ func tilesDB() map[string][3]float64 {
 	return db
 }
 
-func nearest(target [3]float64, db *map[string][3]float64) string {
+func (db *DB) nearest(target [3]float64) string {
 	var filename string
+	db.mutex.Lock()
 	smallest := 1000000.0
-	for k, v := range *db {
+	for k, v := range db.store {
 		dist := distance(target, v)
 		if dist < smallest {
 			filename, smallest = k, dist
 		}
 	}
 
-	delete(*db, filename)
+	delete(db.store, filename)
+	db.mutex.Unlock()
 	return filename
 }
 
